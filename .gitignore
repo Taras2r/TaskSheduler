@@ -1,0 +1,9 @@
+TaskSheduler_eeprom.hex
+TaskSheduler.o
+TaskSheduler.map
+TaskSheduler.lst
+TaskSheduler.hex
+TaskSheduler.elf
+.settings
+.cproject
+.project
