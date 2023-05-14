@@ -13,7 +13,7 @@
 #define __AVR_ATmega8__
 #endif
 
-//#define MAX_TASKS (10)
+#define MAX_TASKS (10)
 
 #define RUNNABLE (0x00)
 #define RUNNING  (0x01)
@@ -32,8 +32,8 @@ typedef struct __tcb_t
 } tcb_t;
 
 // the task list
-tcb_t *task_list = 0x00;
-uint8_t max_tasks;
+tcb_t task_list[MAX_TASKS];
+
 char* buff;
 
 inline void io_init (void)__attribute__((always_inline));
@@ -46,7 +46,7 @@ void send_message_to_UDR(char * message, int integer);
 void init_integer_buff(void);
 //
 
-void initScheduler(uint8_t num_tasks);
+void initScheduler(void);
 void addTask(uint8_t, task_t, uint16_t);
 void deleteTask(uint8_t);
 uint8_t getTaskStatus(uint8_t);
@@ -54,17 +54,16 @@ void dispatchTasks(void);
 
 void Task1(void);
 void Task2(void);
+static volatile int count = 0;//try to move to ISR
 
 ISR(TIMER0_OVF_vect, ISR_BLOCK)
 {
-	static int count = 0;
-
 	count++;
-	if (count == 392)
+	if (count == 13)
 	{
 		count = 0;
 		// cycle through available tasks
-		for (uint8_t i = 0; i < max_tasks; i++)
+		for (uint8_t i = 0; i < MAX_TASKS; i++)
 		{
 			if (task_list[i].status == RUNNABLE)
 			{
@@ -83,46 +82,34 @@ void main (void)
 	init_integer_buff();
 
 	io_init();
-	initScheduler(2);
+	initScheduler();
 
-	addTask(1, Task1, 10000);
-	addTask(2, Task2, 40000);
+	addTask(1, Task1, 10);
+	addTask(2, Task2, 40);
 	sei();
 
     while (1)
     {
    	 	 dispatchTasks();
-   	 	// send_message_to_UDR("Data ", -45);
     }
 }
 
 void io_init (void)
 {
 	// use 1/8 of system clock frequency
-	 TCCR0 = 0x02;
+	 TCCR0 = 0x04;//consider how to calculate value automatically
 	 // inital timer value = 0
 	 TCNT0 = 0;
 	 // enable Timer0 Overflow interrupt
 	 TIMSK = _BV(TOIE0);
 	 // set PORTD bit0 and bit1 as outputs
-	 DDRD = _BV(PD0) | _BV(PD1);
-
+	 //DDRD = _BV(PD0) | _BV(PD1);
 }
 
 // initialises the task list
-void initScheduler(uint8_t num_tasks)
+void initScheduler(void)
 {
-	task_list = (tcb_t*) malloc(sizeof(tcb_t) * num_tasks);
-	if (task_list == 0x00)
-	{
-		char* error_message = "Scheduler err.\n\r";
-		do
-		{
-			put_char_to_udr(*error_message);
-		}while(*++error_message);
-	}
-	max_tasks = num_tasks;
-	for (uint8_t i = 0; i < num_tasks; i++)
+	for (uint8_t i = 0; i < MAX_TASKS; i++)
 	{
 		task_list[i].id = 0;
 		task_list[i].task = (task_t) 0x00;
@@ -140,7 +127,7 @@ void addTask(uint8_t id, task_t task, uint16_t period)
 {
 	uint8_t idx = 0;
 	uint8_t done = 0;
-	while (idx < max_tasks)
+	while (idx < MAX_TASKS)
 	{
 		if (task_list[idx].status == STOPPED)
 		{
@@ -164,7 +151,7 @@ void addTask(uint8_t id, task_t task, uint16_t period)
 // to removing a task
 void deleteTask(uint8_t id)
 {
-	for (uint8_t i = 0; i < max_tasks; i++)
+	for (uint8_t i = 0; i < MAX_TASKS; i++)
 	{
 		if (task_list[i].id == id)
 		{
@@ -178,7 +165,7 @@ void deleteTask(uint8_t id)
 // returns ERROR if id is invalid
 uint8_t getTaskStatus(uint8_t id)
 {
-	for (uint8_t i = 0; i < max_tasks; i++)
+	for (uint8_t i = 0; i < MAX_TASKS; i++)
 	{
 		if (task_list[i].id == id)
 		{
@@ -191,7 +178,7 @@ uint8_t getTaskStatus(uint8_t id)
 // dispatches tasks when they are ready to run
 void dispatchTasks(void)
 {
-	for (uint8_t i = 0; i < max_tasks; i++)
+	for (uint8_t i = 0; i < MAX_TASKS; i++)
 	{
 		// check for a valid task ready to run
 		if (!task_list[i].delay && task_list[i].status == RUNNABLE)
@@ -268,7 +255,7 @@ void send_message_to_UDR(char * message, int integer)
 void init_integer_buff(void)
 {
 	buff = (char*) malloc(sizeof(int8_t)*8+1);
-	if(buff == NULL)
+	if(buff == ((void *)0))
 	{
 		char* error_message = "Malloc err.\n\r";
 		do
