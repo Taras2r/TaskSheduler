@@ -4,7 +4,7 @@
 #include <avr/iom8.h>
 #include <stdlib.h>
 
-#define BAUD 9600
+#define BAUD 38400
 #define F_CPU 8000000
 #include <util/delay.h>
 #include <util/setbaud.h>
@@ -13,12 +13,14 @@
 #define __AVR_ATmega8__
 #endif
 
-#define MAX_TASKS (10)
+#define MAX_TASKS (4)
 
 #define RUNNABLE (0x00)
 #define RUNNING  (0x01)
 #define STOPPED  (0x02)
 #define ERROR    (0x03)
+
+#define TICK 1 //one tick equals to 32.768 ms
 
 typedef void (*task_t)(void);
 typedef struct __tcb_t
@@ -54,21 +56,18 @@ void dispatchTasks(void);
 
 void Task1(void);
 void Task2(void);
-static volatile int count = 0;//try to move to ISR
+void Task3(void);
+void Task4(void);
+void Task5(void);
 
 ISR(TIMER0_OVF_vect, ISR_BLOCK)
 {
-	count++;
-	if (count == 13)
+	// cycle through available tasks
+	for (uint8_t i = 0; i < MAX_TASKS; i++)
 	{
-		count = 0;
-		// cycle through available tasks
-		for (uint8_t i = 0; i < MAX_TASKS; i++)
+		if (task_list[i].status == RUNNABLE)
 		{
-			if (task_list[i].status == RUNNABLE)
-			{
-				task_list[i].delay--;
-			}
+			task_list[i].delay--;
 		}
 	}
 }
@@ -84,20 +83,24 @@ void main (void)
 	io_init();
 	initScheduler();
 
-	addTask(1, Task1, 10);
-	addTask(2, Task2, 40);
+	addTask(0, Task1, TICK*10);
+	addTask(1, Task2, TICK*30);
+	addTask(2, Task3, TICK*40);
+	addTask(3, Task4, TICK*50);
+
 	sei();
 
     while (1)
     {
-   	 	 dispatchTasks();
+   	 	dispatchTasks();
+   	 	//put_char_to_udr('1');
     }
 }
 
 void io_init (void)
 {
-	// use 1/8 of system clock frequency
-	 TCCR0 = 0x04;//consider how to calculate value automatically
+	// P = 1024 * 256 / 8 000 000 = 0,032768 s
+	 TCCR0 = 0x05;//consider how to calculate value automatically
 	 // inital timer value = 0
 	 TCNT0 = 0;
 	 // enable Timer0 Overflow interrupt
@@ -199,13 +202,23 @@ void dispatchTasks(void)
 // Task definitions
 void Task1(void)
 {
-	send_message_to_UDR("Data ", -45);
+	send_message_to_UDR("T1 T2d", task_list[1].delay);
 }
 
 
 void Task2(void)
 {
-	send_message_to_UDR("New Data ", 250);
+	send_message_to_UDR("T2 T1d", task_list[0].delay);
+}
+
+void Task3(void)
+{
+	send_message_to_UDR("T3 T4d", task_list[3].delay);
+}
+
+void Task4(void)
+{
+	send_message_to_UDR("T4 T3d", task_list[2].delay);
 }
 
 //UART
